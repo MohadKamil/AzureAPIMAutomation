@@ -8,7 +8,7 @@ namespace AzureAPIMAutomation
     internal class ApiStack : Stack
     {
         private const string PetStoreOpenApiDocument =
-            "https://github.com/OAI/OpenAPI-Specification/blob/main/examples/v3.0/petstore.yaml";
+            "./petStoreOpenAPI.yaml";
         public ApiStack()
         {
         

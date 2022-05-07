@@ -1,0 +1,3 @@
+name: AzureAPIMAutomation
+runtime: dotnet
+description: Project demoing how to automate publishing an API to an azure API gateway

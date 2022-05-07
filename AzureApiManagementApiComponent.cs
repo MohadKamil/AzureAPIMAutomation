@@ -15,12 +15,19 @@ using Newtonsoft.Json.Linq;
 using Pulumi;
 using Pulumi.AzureNative.ApiManagement;
 using Pulumi.AzureNative.ApiManagement.Inputs;
+using ApiSchema = Pulumi.AzureNative.ApiManagement.V20210801.ApiSchema;
 
 
 namespace AzureAPIMAutomation
 {
     public class AzureApiManagementApiComponent : ComponentResource
     {
+        private static readonly HashSet<string> FormSchemaNames = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase)
+        {
+            "multipart/form-data",
+            "application/x-www-form-urlencoded"
+        };
+
         private const string ApiSchemaId = "apischema";
         private const string PolicyKey = "x-az-apim-inbound-append-policy";
 
@@ -103,6 +110,7 @@ namespace AzureAPIMAutomation
                         {
                             var (statusCode, openApiResponseValue) = r;
                             int.TryParse(statusCode, out var responseStatusCode);
+                            
                             return new ResponseContractArgs
                             {
                                 Description = openApiResponseValue.Description,
@@ -110,11 +118,13 @@ namespace AzureAPIMAutomation
                                 Representations = openApiResponseValue.Content?.Select(c =>
                                 {
                                     var (contentType, openApiMediaType) = c;
+                                    var candidateTypeName = openApiMediaType.Schema?.Reference?.Id ?? string.Empty;
+                                    var schemaNameAndType = GetSchemaIdOnlyIfNonFormData(contentType,apiSchema,candidateTypeName);
                                     return new RepresentationContractArgs
                                     {
-                                        TypeName = openApiMediaType.Schema?.Reference?.Id ?? string.Empty,
                                         Sample = GetExampleOfPropertiesExample(openApiMediaType),
-                                        SchemaId = apiSchema.Name,
+                                        SchemaId = schemaNameAndType.Apply(s => s.schemaName),
+                                        TypeName = schemaNameAndType.Apply(s => s.typeName),
                                         ContentType = contentType
                                     };
                                 }).ToList() ?? new InputList<RepresentationContractArgs>(),
@@ -159,12 +169,14 @@ namespace AzureAPIMAutomation
                                 .Select(c =>
                             {
                                 var (contentType, openApiMediaType) = c;
+                                var candidateTypeName = openApiMediaType.Schema?.Reference?.Id ?? string.Empty;
+                                var schemaNameAndType = GetSchemaIdOnlyIfNonFormData(contentType,apiSchema,candidateTypeName);
                                 return new RepresentationContractArgs
                                 {
                                     ContentType = contentType,
                                     Sample = GetExampleOfPropertiesExample(openApiMediaType.Schema),
-                                    SchemaId = apiSchema.Name,
-                                    TypeName = openApiMediaType.Schema?.Reference?.Id ?? string.Empty,
+                                    SchemaId = schemaNameAndType.Apply(s => s.schemaName),
+                                    TypeName = schemaNameAndType.Apply(s => s.typeName)
                                 };
                             }).ToList() ?? new List<RepresentationContractArgs>(),
                             Description = openApiOperation.Description,
@@ -217,7 +229,13 @@ namespace AzureAPIMAutomation
             RegisterOutputs();
         }
 
-       
+        private static Output<(string? schemaName, string? typeName)> GetSchemaIdOnlyIfNonFormData(string contentType,
+            ApiSchema schema,
+            string candidateTypeName)
+        {
+            return schema.Name.Apply(n => FormSchemaNames.Contains(contentType) ? (null,null) : (n,candidateTypeName));
+        }
+
 
         private static OpenApiDocument GetApiDocument(string documentUri)
         {
